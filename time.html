@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>横向交互式时间轴（含图片）</title>
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2ecc71;
+            --text-color: #333;
+            --bg-color: #f9f9f9;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 20px;
+            overflow-x: auto; /* 允许横向滚动 */
+        }
+        
+        .timeline-container {
+            min-width: 1000px; /* 确保足够宽度 */
+            padding: 60px 0;
+            position: relative;
+        }
+        
+        /* 横向时间轴主线 */
+        .timeline-line {
+            position: absolute;
+            left: 0;
+            top: 50%;
+            width: 100%;
+            height: 4px;
+            background: var(--primary-color);
+            transform: translateY(-50%);
+            z-index: 1;
+        }
+        
+        /* 时间轴节点容器 */
+        .timeline {
+            display: flex;
+            position: relative;
+            z-index: 2;
+        }
+        
+        /* 单个时间节点 */
+        .timeline-item {
+            flex: 1;
+            min-width: 200px;
+            padding: 0 15px;
+            position: relative;
+        }
+        
+        /* 节点内容 */
+        .timeline-content {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-align: center;
+        }
+        
+        .timeline-content:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* 图片容器 */
+        .timeline-image {
+            width: 100%;
+            height: 120px;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 10px;
+            position: relative;
+        }
+        
+        .timeline-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.5s ease;
+        }
+        
+        .timeline-content:hover .timeline-image img {
+            transform: scale(1.1);
+        }
+        
+        /* 节点标题 */
+        .timeline-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--primary-color);
+        }
+        
+        /* 节点日期 */
+        .timeline-date {
+            display: inline-block;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 3px 8px;
+            background: var(--secondary-color);
+            color: white;
+            border-radius: 20px;
+            margin-bottom: 10px;
+        }
+        
+        /* 节点描述（默认隐藏） */
+        .timeline-desc {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+            line-height: 1.5;
+            font-size: 0.9rem;
+        }
+        
+        /* 展开状态 */
+        .timeline-desc.active {
+            max-height: 200px;
+            margin-top: 10px;
+        }
+        
+        /* 节点标记（圆点） */
+        .timeline-marker {
+            position: absolute;
+            left: 50%;
+            top: -30px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            border: 4px solid white;
+            transform: translateX(-50%);
+            z-index: 3;
+        }
+        
+        /* 大图模态框 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            max-width: 80%;
+            max-height: 80%;
+        }
+        
+        .modal-content img {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+        }
+        
+        .close-modal {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            body {
+                overflow-x: auto;
+            }
+            
+            .timeline-container {
+                min-width: 600px; /* 移动端保持横向滚动 */
+            }
+            
+            .timeline-item {
+                min-width: 150px;
+            }
+            
+            .timeline-image {
+                height: 80px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="timeline-container">
+        <div class="timeline-line"></div>
+        <div class="timeline" id="timeline"></div>
+    </div>
+
+    <!-- 图片大图模态框 -->
+    <div class="modal" id="imageModal">
+        <span class="close-modal">&times;</span>
+        <div class="modal-content">
+            <img id="expandedImage" src="" alt="大图预览">
+        </div>
+    </div>
+
+    <script>
+        // 时间轴数据（含图片路径）
+        const timelineData = [
+            {
+                title: "沿岸星火",
+                date: "1978-1992",
+                desc: "改革开放初期，服装制造业主要集中在沿海传统工业基地。这一阶段的生产布局仍带有明显的计划经济色彩，国有服装厂占据主导地位，地理分布相对集中。",
+                image: "images/1.png"
+            },
+            {
+                title: "政策驱动",
+                date: "1992-2000",
+                desc: "社会主义市场经济体制确立后，服装产业迎来第一次大规模地理扩张。广东珠三角地区开始承接港澳地区的三来一补加工贸易，形成早期外向型服装产业集群。",
+                image: "images/2.png"
+            },
+            {
+                title: "内陆崛起",
+                date: "2001-2010",
+                desc: "中国加入WTO后，服装产业地理分布呈现沿海集聚+内陆零星点缀的特征。这一阶段产业集群效应显著增强，全国形成数百个服装特色镇，但80%以上的产能仍集中在东部沿海。",
+                image: "images/3.png"
+            },
+            {
+                title: "东技西移",
+                date: "2015-2025",
+                desc: "新一轮产业转移背景下，服装制造业地理分布出现双中心扩散趋势。跨境电商的发展使内陆口岸城市如重庆、西安也培育出服装设计销售集群，但整体上仍呈现东密西疏的梯度分布格局，且区域专业化分工更加明晰。",
+                image: "images/4.png"
+            }
+        ];
+
+        // 渲染时间轴
+        const timeline = document.getElementById('timeline');
+        
+        timelineData.forEach((item, index) => {
+            const timelineItem = document.createElement('div');
+            timelineItem.className = 'timeline-item';
+            
+            timelineItem.innerHTML = `
+                <div class="timeline-marker"></div>
+                <div class="timeline-content">
+                    <div class="timeline-image">
+                        <img src="${item.image}" alt="${item.title}">
+                    </div>
+                    <div class="timeline-date">${item.date}</div>
+                    <h3 class="timeline-title">${item.title}</h3>
+                    <div class="timeline-desc">${item.desc}</div>
+                </div>
+            `;
+            
+            timeline.appendChild(timelineItem);
+        });
+
+        // 添加点击交互（展开/折叠描述）
+        document.querySelectorAll('.timeline-content').forEach(item => {
+            item.addEventListener('click', function(e) {
+                // 如果点击的是图片则不触发描述展开
+                if (!e.target.closest('.timeline-image')) {
+                    const desc = this.querySelector('.timeline-desc');
+                    desc.classList.toggle('active');
+                }
+            });
+        });
+
+        // 图片点击放大功能
+        const modal = document.getElementById('imageModal');
+        const modalImg = document.getElementById('expandedImage');
+        
+        document.querySelectorAll('.timeline-image img').forEach(img => {
+            img.addEventListener('click', function() {
+                modal.style.display = 'flex';
+                modalImg.src = this.src;
+            });
+        });
+        
+        // 关闭模态框
+        document.querySelector('.close-modal').addEventListener('click', function() {
+            modal.style.display = 'none';
+        });
+        
+        // 点击模态框背景关闭
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
